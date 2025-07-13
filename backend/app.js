@@ -33,6 +33,10 @@ app.use('/projects', projectRouter)  //project routes
 
 app.use('/ai', geminiRouter)
 
+app.get('/api', (req, res) => {
+  res.json({message : "Hello from vercel"})
+})
+
 app.get('/' , (req, res) => {
    return res.send('hello')
 })
