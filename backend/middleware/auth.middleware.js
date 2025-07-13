@@ -20,11 +20,12 @@ export const authUser = async (req, res, next) => {
         // Check if the token is blacklisted in Redis after logout
         // If the token is blacklisted, it means the user has logged out
 
+        const isProduction = process.env.NODE_ENV === 'production';
         if(isBlackListed === 'logout') {
             res.clearCookie('token', {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === 'production', // true only on HTTPS
-                sameSite: 'Lax'
+                secure: isProduction, // true only on HTTPS
+                sameSite: isProduction ? 'None' : 'Lax', // Or 'None' if frontend is on different domain and using HTTPS
             });
             return res.status(401).send({ error: 'Unauthorized User' });
         }
