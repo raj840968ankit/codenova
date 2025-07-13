@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+.message-box{
+    scroll-behavior: smooth;
+}
