@@ -13,14 +13,6 @@ import hljs from "highlight.js";
 import 'highlight.js/styles/nord.css';
 import { getWebContainer } from "../config/webContainer.js";
 
-// Add debounce function
-const debounce = (func, wait) => {
-    let timeout;
-    return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), wait);
-    };
-};
 
 // Component to handle syntax highlighting for code blocks in Markdown
 function SyntaxHighlightedCode(props) {
@@ -142,12 +134,13 @@ export const Project = () => {
         setMessage("");
     }
 
-    // Add this useEffect for handling incoming updates
+    // 3. Update the file-update message handler to prevent self-updates:
     useEffect(() => {
         receiveMessage("file-update", ({ fileName, contents, sender }) => {
-            if (sender === user.email || currentFile !== fileName) return;
+            // Ignore updates from self
+            if (sender === user.email) return;
 
-            // Only update if content actually changed
+            // Only update if content actually changed and file is open
             if (fileTree[fileName]?.file.contents !== contents) {
                 setFileTree(prev => ({
                     ...prev,
@@ -157,7 +150,7 @@ export const Project = () => {
                 }));
             }
         });
-    }, [user.email, currentFile, fileTree]);
+    }, [user.email, fileTree]);
 
     useEffect(() => {
         return () => {
@@ -328,8 +321,12 @@ export const Project = () => {
     // Create debounced save functions
     const saveTimeoutRef = useRef(null);
 
+    // 2. Replace the handleFileChange function with this:
     const handleFileChange = useCallback(
-        debounce((fileName, updatedContent) => {
+        (fileName, updatedContent) => {
+            // Only update if content actually changed
+            if (fileTree[fileName]?.file.contents === updatedContent) return;
+
             const ft = {
                 ...fileTree,
                 [fileName]: {
@@ -340,16 +337,23 @@ export const Project = () => {
             };
 
             setFileTree(ft);
-            saveFileTree(ft);
 
-            // Send update to other collaborators
+            // Send update to other collaborators immediately
             sendMessage("file-update", {
                 fileName,
                 contents: updatedContent,
                 projectId: location.state.project._id,
                 sender: user.email,
             });
-        }, 300), // 300ms debounce time
+
+            // Debounce saving to database
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            saveTimeoutRef.current = setTimeout(() => {
+                saveFileTree(ft);
+            }, 1000);
+        },
         [fileTree, user.email, location.state.project._id]
     );
 
