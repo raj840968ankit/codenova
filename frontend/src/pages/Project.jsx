@@ -51,8 +51,54 @@ export const Project = () => {
     const [iframeUrl, setIframeUrl] = useState(null); // URL for the live preview iframe
     const [runProcess, setRunProcess] = useState(null); // Reference to the running WebContainer process
     const [runError, setRunError] = useState(""); // Add this state at the top
+    // 1. Add a new state for the current file content
+    const [currentFileContent, setCurrentFileContent] = useState('');
+
+    // 2. Add refs to track cursor position
+    const codeRef = useRef(null);
+    const lastCursorPosition = useRef(0);
 
     const location = useLocation(); // Hook to access route state (project ID)
+
+    // 3. Update effect to set initial file content
+    useEffect(() => {
+        if (currentFile && fileTree[currentFile]) {
+            setCurrentFileContent(fileTree[currentFile].file.contents);
+        } else {
+            setCurrentFileContent('');
+        }
+    }, [currentFile, fileTree]);
+
+    // 4. Create a new handler for file content changes
+    const handleContentChange = (e) => {
+        const updatedContent = e.target.innerText;
+        setCurrentFileContent(updatedContent);
+
+        // Save cursor position before updating
+        const selection = window.getSelection();
+        lastCursorPosition.current = selection.rangeCount > 0
+            ? selection.getRangeAt(0).startOffset
+            : 0;
+
+        // Immediately update other collaborators
+        handleFileChange(currentFile, updatedContent);
+    };
+
+    // 5. Create an effect to restore cursor position after updates
+    useEffect(() => {
+        if (codeRef.current && lastCursorPosition.current > 0) {
+            const textNode = codeRef.current.childNodes[0] || document.createTextNode('');
+            const range = document.createRange();
+            range.setStart(textNode, Math.min(lastCursorPosition.current, textNode.length));
+            range.collapse(true);
+
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            codeRef.current.focus();
+        }
+    }, [currentFileContent]);
 
     // Effect hook for initial setup: fetching users, initializing socket, and WebContainer
     useEffect(() => {
@@ -722,33 +768,17 @@ export const Project = () => {
                                 {currentFile && fileTree[currentFile] && fileTree[currentFile].file ? (
                                     <pre className="hljs h-full m-0 p-4 text-sm leading-relaxed overflow-auto">
                                         <code
+                                            ref={codeRef}
                                             className="hljs h-full outline-none block"
                                             contentEditable
                                             suppressContentEditableWarning
-                                            onInput={(e) => {
-                                                const updatedContent = e.target.innerText;
-                                                handleFileChange(currentFile, updatedContent);
-                                            }}
+                                            onInput={handleContentChange}
                                             onBlur={(e) => {
-                                                const updatedContent = e.target.innerText;
-                                                handleFileChange(currentFile, updatedContent);
-                                                // Flush immediately on blur
-                                                if (saveTimeoutRef.current) {
-                                                    clearTimeout(saveTimeoutRef.current);
-                                                    saveTimeoutRef.current = null;
-                                                }
+                                                handleFileChange(currentFile, e.target.innerText);
                                             }}
-                                            dangerouslySetInnerHTML={{
-                                                __html: hljs.highlight(
-                                                    fileTree[currentFile]?.file.contents || "",
-                                                    { language: "javascript" }
-                                                ).value,
-                                            }}
-                                            style={{
-                                                whiteSpace: "pre-wrap",
-                                                minHeight: "100%",
-                                            }}
-                                        />
+                                        >
+                                            {currentFileContent}
+                                        </code>
                                     </pre>
                                 ) : (
                                     <div className="flex-grow h-full flex items-center justify-center text-gray-500 text-lg bg-gray-100">
