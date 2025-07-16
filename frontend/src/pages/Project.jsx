@@ -10,6 +10,7 @@ import { useContext } from "react";
 import { UserContext } from "../context/user.context.jsx";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
+import 'highlight.js/styles/nord.css';
 import { getWebContainer } from "../config/webContainer.js";
 
 // Component to handle syntax highlighting for code blocks in Markdown

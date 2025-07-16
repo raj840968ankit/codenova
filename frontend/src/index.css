@@ -1,9 +1,5 @@
 @import "tailwindcss";
 
-#root{
-    margin : 0;
-    padding : 0;
-}
 .message-box{
     scroll-behavior: smooth;
 }
