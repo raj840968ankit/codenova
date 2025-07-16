@@ -13,6 +13,62 @@ import hljs from "highlight.js";
 import 'highlight.js/styles/nord.css';
 import { getWebContainer } from "../config/webContainer.js";
 
+const CodeEditor = ({ content, language, onChange }) => {
+    const textareaRef = useRef(null);
+
+    const handleChange = (e) => {
+        onChange(e.target.value);
+    };
+
+    const highlighted = hljs.highlight(content, { language }).value;
+
+    return (
+        <div className="editor-container" style={{ position: 'relative' }}>
+            <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={handleChange}
+                spellCheck="false"
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: 1,
+                    opacity: 0.8,
+                    color: 'transparent',
+                    background: 'transparent',
+                    caretColor: 'white',
+                    resize: 'none',
+                    border: 'none',
+                    outline: 'none',
+                    fontFamily: 'monospace',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    padding: '16px',
+                    whiteSpace: 'pre',
+                    overflow: 'auto',
+                }}
+            />
+            <pre
+                aria-hidden="true"
+                style={{
+                    position: 'relative',
+                    zIndex: 0,
+                    margin: 0,
+                    padding: '16px',
+                    fontFamily: 'monospace',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                }}
+                dangerouslySetInnerHTML={{ __html: highlighted }}
+            />
+        </div>
+    );
+};
 // Add debounce function
 const debounce = (func, wait) => {
     let timeout;
@@ -715,39 +771,20 @@ export const Project = () => {
                             fileTree[currentFile] &&
                             fileTree[currentFile].file ? (
                             <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-900 text-white rounded-b-lg">
-                                {currentFile && fileTree[currentFile] && fileTree[currentFile].file ? (
-                                    <pre className="hljs h-full m-0 p-4 text-sm leading-relaxed overflow-auto">
-                                        <code
-                                            className="hljs h-full outline-none block"
-                                            contentEditable
-                                            suppressContentEditableWarning
-                                            onInput={(e) => {
-                                                const updatedContent = e.target.innerText;
-                                                handleFileChange(currentFile, updatedContent);
-                                            }}
-                                            onBlur={(e) => {
-                                                const updatedContent = e.target.innerText;
-                                                handleFileChange(currentFile, updatedContent);
-                                                // Flush immediately on blur
-                                                if (saveTimeoutRef.current) {
-                                                    clearTimeout(saveTimeoutRef.current);
-                                                    saveTimeoutRef.current = null;
-                                                }
-                                            }}
-                                            dangerouslySetInnerHTML={{
-                                                __html: hljs.highlight(
-                                                    fileTree[currentFile]?.file.contents || "",
-                                                    { language: "javascript" }
-                                                ).value,
-                                            }}
-                                            style={{
-                                                whiteSpace: "pre-wrap",
-                                                minHeight: "100%",
+                                {currentFile &&
+                                    fileTree[currentFile] &&
+                                    fileTree[currentFile].file ? (
+                                    <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-900 text-white rounded-b-lg">
+                                        <CodeEditor
+                                            content={fileTree[currentFile].file.contents}
+                                            language="javascript"
+                                            onChange={(newContent) => {
+                                                handleFileChange(currentFile, newContent);
                                             }}
                                         />
-                                    </pre>
+                                    </div>
                                 ) : (
-                                    <div className="flex-grow h-full flex items-center justify-center text-gray-500 text-lg bg-gray-100">
+                                    <div className="flex-grow h-full flex items-center justify-center text-gray-500 text-lg bg-gray-100 rounded-b-lg">
                                         Select a file to view its content.
                                     </div>
                                 )}
@@ -822,44 +859,81 @@ export const Project = () => {
             {/* Custom CSS for scrollbar-hide */}
             <style>
                 {`
-                .scrollbar-hide::-webkit-scrollbar {
-                    display: none;
-                }
-                .scrollbar-hide {
-                    -ms-overflow-style: none;  /* IE and Edge */
-                    scrollbar-width: none;  /* Firefox */
-                }
-                /* Basic markdown styling for AI messages */
-                .markdown-body pre {
-                    background-color: #1a202c !important; /* Dark background for code blocks */
-                    padding: 1rem;
-                    border-radius: 0.5rem;
-                    overflow-x: auto;
-                    white-space: pre-wrap;
-                    word-break: break-all;
-                }
-                .markdown-body code {
-                    font-family: 'Fira Code', 'Cascadia Code', monospace;
-                    font-size: 0.875rem; /* text-sm */
-                    color: #e2e8f0; /* Light gray for code text */
-                }
-                .markdown-body p {
-                    margin-bottom: 0.5rem;
-                }
-                .markdown-body ul, .markdown-body ol {
-                    margin-left: 1.5rem;
-                    margin-bottom: 0.5rem;
-                }
-                .markdown-body li {
-                    margin-bottom: 0.25rem;
-                }
-                .markdown-body strong {
-                    font-weight: 600;
-                }
-                .markdown-body a {
-                    color: #60a5fa; /* blue-400 */
-                    text-decoration: underline;
-                }
+                    .scrollbar-hide::-webkit-scrollbar {
+                        display: none;
+                    }
+                    .scrollbar-hide {
+                        -ms-overflow-style: none;  /* IE and Edge */
+                        scrollbar-width: none;  /* Firefox */
+                    }
+                    /* Basic markdown styling for AI messages */
+                    .markdown-body pre {
+                        background-color: #1a202c !important; /* Dark background for code blocks */
+                        padding: 1rem;
+                        border-radius: 0.5rem;
+                        overflow-x: auto;
+                        white-space: pre-wrap;
+                        word-break: break-all;
+                    }
+                    .markdown-body code {
+                        font-family: 'Fira Code', 'Cascadia Code', monospace;
+                        font-size: 0.875rem; /* text-sm */
+                        color: #e2e8f0; /* Light gray for code text */
+                    }
+                    .markdown-body p {
+                        margin-bottom: 0.5rem;
+                    }
+                    .markdown-body ul, .markdown-body ol {
+                        margin-left: 1.5rem;
+                        margin-bottom: 0.5rem;
+                    }
+                    .markdown-body li {
+                        margin-bottom: 0.25rem;
+                    }
+                    .markdown-body strong {
+                        font-weight: 600;
+                    }
+                    .markdown-body a {
+                        color: #60a5fa; /* blue-400 */
+                        text-decoration: underline;
+                    }
+                    .editor-container {
+                        position: relative;
+                        height: 100%;
+                    }
+
+                    .editor-container textarea,
+                    .editor-container pre {
+                    font-family: 'Fira Code', 'Consolas', monospace;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    tab-size: 4;
+                    white-space: pre;
+                    padding: 16px;
+                    margin: 0;
+                    overflow: auto;
+                    }
+
+                    .editor-container textarea {
+                    background: transparent;
+                    color: transparent;
+                    caret-color: white;
+                    resize: none;
+                    border: none;
+                    outline: none;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: 1;
+                    }
+
+                    .editor-container pre {
+                    position: relative;
+                    z-index: 0;
+                    pointer-events: none;
+                    }   
                 `}
             </style>
         </main>
