@@ -161,13 +161,13 @@ export const Project = () => {
         });
     }, [user.email, currentFile, fileTree]);
 
-    useEffect(() => {
-        return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-        };
-    }, []);
+    // useEffect(() => {
+    //     return () => {
+    //         if (saveTimeoutRef.current) {
+    //             clearTimeout(saveTimeoutRef.current);
+    //         }
+    //     };
+    // }, []);
 
     // Add this useEffect to restore cursor after updates
     useEffect(() => {
@@ -336,8 +336,8 @@ export const Project = () => {
         }
     };
 
-    // Create debounced save functions
-    const saveTimeoutRef = useRef(null);
+    // // Create debounced save functions
+    // const saveTimeoutRef = useRef(null);
 
     const handleFileChange = useCallback(
         debounce((fileName, updatedContent) => {
