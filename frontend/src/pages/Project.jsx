@@ -59,6 +59,8 @@ export const Project = () => {
     const [iframeUrl, setIframeUrl] = useState(null); // URL for the live preview iframe
     const [runProcess, setRunProcess] = useState(null); // Reference to the running WebContainer process
     const [runError, setRunError] = useState(""); // Add this state at the top
+    const [cursorPosition, setCursorPosition] = useState({ file: null, pos: null });
+    const editorRef = useRef(null);
 
     const location = useLocation(); // Hook to access route state (project ID)
 
@@ -166,6 +168,15 @@ export const Project = () => {
             }
         };
     }, []);
+
+    // Add this useEffect to restore cursor after updates
+    useEffect(() => {
+        if (editorRef.current) {
+            // Restore cursor after content updates
+            restoreCursorPosition();
+        }
+    }, [fileTree, currentFile]);
+
 
     useEffect(() => {
         receiveMessage("file-delete", ({ fileName, sender }) => {
@@ -342,16 +353,61 @@ export const Project = () => {
             setFileTree(ft);
             saveFileTree(ft);
 
-            // Send update to other collaborators
             sendMessage("file-update", {
                 fileName,
                 contents: updatedContent,
                 projectId: location.state.project._id,
                 sender: user.email,
             });
-        }, 300), // 300ms debounce time
+        }, 300),
         [fileTree, user.email, location.state.project._id]
     );
+    // Add these inside your component
+    const saveCursorPosition = () => {
+        if (!editorRef.current) return;
+
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const preSelectionRange = range.cloneRange();
+            preSelectionRange.selectNodeContents(editorRef.current);
+            preSelectionRange.setEnd(range.startContainer, range.startOffset);
+            setCursorPosition({
+                file: currentFile,
+                pos: preSelectionRange.toString().length
+            });
+        }
+    };
+
+    const restoreCursorPosition = () => {
+        if (!editorRef.current || !cursorPosition.pos || cursorPosition.file !== currentFile) return;
+
+        const textNode = getTextNodeAtPosition(editorRef.current, cursorPosition.pos);
+        if (textNode) {
+            const range = document.createRange();
+            range.setStart(textNode, cursorPosition.pos);
+            range.collapse(true);
+
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    };
+
+    const getTextNodeAtPosition = (root, index) => {
+        const treeWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let currentIndex = 0;
+        let currentNode;
+
+        while (currentIndex <= index && (currentNode = treeWalker.nextNode())) {
+            const nodeLength = currentNode.length || 0;
+            if (index <= currentIndex + nodeLength) {
+                return currentNode;
+            }
+            currentIndex += nodeLength;
+        }
+        return null;
+    };
 
     return (
         <main className="flex flex-col lg:flex-row w-screen overflow-hidden font-inter min-h-screen lg:h-screen">
@@ -718,21 +774,26 @@ export const Project = () => {
                                 {currentFile && fileTree[currentFile] && fileTree[currentFile].file ? (
                                     <pre className="hljs h-full m-0 p-4 text-sm leading-relaxed overflow-auto">
                                         <code
+                                            ref={editorRef}
                                             className="hljs h-full outline-none block"
                                             contentEditable
                                             suppressContentEditableWarning
                                             onInput={(e) => {
+                                                saveCursorPosition();
                                                 const updatedContent = e.target.innerText;
                                                 handleFileChange(currentFile, updatedContent);
                                             }}
-                                            onBlur={(e) => {
-                                                const updatedContent = e.target.innerText;
-                                                handleFileChange(currentFile, updatedContent);
-                                                // Flush immediately on blur
-                                                if (saveTimeoutRef.current) {
-                                                    clearTimeout(saveTimeoutRef.current);
-                                                    saveTimeoutRef.current = null;
+                                            onKeyDown={(e) => {
+                                                // Save position on arrow keys and other navigation
+                                                if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+                                                    setTimeout(saveCursorPosition, 0);
                                                 }
+                                            }}
+                                            onClick={saveCursorPosition}
+                                            onBlur={() => {
+                                                const updatedContent = editorRef.current?.innerText || "";
+                                                handleFileChange(currentFile, updatedContent);
+                                                setCursorPosition({ file: null, pos: null });
                                             }}
                                             dangerouslySetInnerHTML={{
                                                 __html: hljs.highlight(
