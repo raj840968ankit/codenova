@@ -12,49 +12,50 @@ import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 import { getWebContainer } from "../config/webContainer.js";
 
+// Environment checks
+const isSecureContext = window.isSecureContext;
+const isLocalhost = window.location.hostname === 'localhost' || 
+                   window.location.hostname === '127.0.0.1';
+
 // Component to handle syntax highlighting for code blocks in Markdown
 function SyntaxHighlightedCode(props) {
     const ref = useRef(null);
 
     useEffect(() => {
-        // Check if the ref exists, if the class includes 'lang-' (indicating a language),
-        // and if hljs is available globally.
         if (ref.current && props.className?.includes("lang-") && window.hljs) {
-            // Highlight the code element
             window.hljs.highlightElement(ref.current);
-
-            // Remove the data-highlighted attribute to allow re-highlighting if content changes
             ref.current.removeAttribute("data-highlighted");
         }
-    }, [props.className, props.children]); // Re-run if class or children (code content) changes
+    }, [props.className, props.children]);
 
     return <code {...props} ref={ref} />;
 }
 
 export const Project = () => {
-    // State variables for UI and application logic
-    const [isSidePanelOpen, setIsSidePanelOpen] = useState(false); // Controls visibility of the collaborators side panel
-    const [isModalOpen, setIsModalOpen] = useState(false); // Controls visibility of the add collaborators modal
-    const [selectedUserIds, setSelectedUserIds] = useState([]); // Stores IDs of users selected in the modal
-    const [users, setUsers] = useState([]); // All registered users
-    const [usersWithProjects, setUsersWithProjects] = useState([]); // Users currently collaborating on this project
-    const [message, setMessage] = useState(""); // Current message being typed in the chat input
-    const [messages, setMessages] = useState([]); // Array to store all chat messages
-    const { user } = useContext(UserContext); // Current authenticated user from context
-    const messageBox = useRef(); // Ref for the chat message container to enable auto-scrolling
-    const [fileTree, setFileTree] = useState({}); // Represents the project's file structure
-    const [currentFile, setCurrentFile] = useState(null); // The currently active file in the editor
-    const [openFiles, setOpenFiles] = useState([]); // List of files currently open as tabs in the editor
-    const [webContainer, setWebContainer] = useState(null); // WebContainer instance for running the project
-    const [iframeUrl, setIframeUrl] = useState(null); // URL for the live preview iframe
-    const [runProcess, setRunProcess] = useState(null); // Reference to the running WebContainer process
-    const [runError, setRunError] = useState(""); // Add this state at the top
+    // State variables
+    const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedUserIds, setSelectedUserIds] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [usersWithProjects, setUsersWithProjects] = useState([]);
+    const [message, setMessage] = useState("");
+    const [messages, setMessages] = useState([]);
+    const { user } = useContext(UserContext);
+    const messageBox = useRef();
+    const [fileTree, setFileTree] = useState({});
+    const [currentFile, setCurrentFile] = useState(null);
+    const [openFiles, setOpenFiles] = useState([]);
+    const [webContainer, setWebContainer] = useState(null);
+    const [iframeUrl, setIframeUrl] = useState(null);
+    const [runProcess, setRunProcess] = useState(null);
+    const [runError, setRunError] = useState("");
+    const [webContainerError, setWebContainerError] = useState('');
+    const [isWebContainerLoading, setIsWebContainerLoading] = useState(false);
 
-    const location = useLocation(); // Hook to access route state (project ID)
+    const location = useLocation();
 
-    // Effect hook for initial setup: fetching users, initializing socket, and WebContainer
+    // Initialize environment
     useEffect(() => {
-        // Function to fetch all users from the backend
         const fetchUsers = async () => {
             try {
                 const response = await axios.get("/users/all");
@@ -64,27 +65,19 @@ export const Project = () => {
             }
         };
 
-        fetchUsers(); // Call fetch users on component mount
-
-        // Initialize WebSocket connection for the current project
+        fetchUsers();
         initializeSocket(location.state.project._id);
 
-        // Listen for incoming chat messages from the server
         receiveMessage("server-message", ({ message, sender }) => {
-            // Only append if the sender is NOT the current user
             if (sender.email === user.email) return;
             appendIncomingMessage({ message, sender: sender.email });
         });
 
-        // Listen for AI-generated messages, which might include file tree updates
         receiveMessage("server-ai-message", ({ aiResult, sender }) => {
             const message = JSON.parse(aiResult);
             const receivedFileTree = message.fileTree || {};
 
-            // Ensure message.fileTree is an object before mounting and setting state
             webContainer?.mount(receivedFileTree);
-
-            // Merge with existing fileTree
             setFileTree((prev) => {
                 const merged = { ...prev, ...receivedFileTree };
                 saveFileTree(merged);
@@ -94,14 +87,49 @@ export const Project = () => {
         });
     }, []);
 
+    // Initialize WebContainer with proper error handling
     useEffect(() => {
-        if (!webContainer) {
-            getWebContainer().then((container) => setWebContainer(container));
-            console.log("WebContainer started");
-        }
-    }, [webContainer]);
+        if (!webContainer && !webContainerError) {
+            const initWebContainer = async () => {
+                // Environment checks
+                if (!isSecureContext && !isLocalhost) {
+                    setWebContainerError(
+                        'WebContainer requires HTTPS or localhost.\n' + 
+                        `Your current environment: ${window.location.protocol}//${window.location.host}\n` +
+                        'For development, use localhost. For production, ensure HTTPS is enabled.'
+                    );
+                    return;
+                }
 
-    // Fetch users with projects (collaborators) on mount and when project changes
+                if (typeof WebContainer === 'undefined') {
+                    setWebContainerError(
+                        'WebContainer API not available.\n' + 
+                        'Make sure you have the latest version of Chrome or Edge.\n' +
+                        'Firefox and Safari are not currently supported.'
+                    );
+                    return;
+                }
+
+                try {
+                    setIsWebContainerLoading(true);
+                    const container = await getWebContainer();
+                    setWebContainer(container);
+                    setWebContainerError('');
+                } catch (error) {
+                    console.error('WebContainer boot failed:', error);
+                    setWebContainerError(
+                        `WebContainer initialization failed: ${error.message}.\n` +
+                        'Please check the browser console for more details.'
+                    );
+                } finally {
+                    setIsWebContainerLoading(false);
+                }
+            };
+
+            initWebContainer();
+        }
+    }, [webContainer, webContainerError]);
+
     useEffect(() => {
         const fetchUsersWithProjects = async () => {
             try {
@@ -134,7 +162,6 @@ export const Project = () => {
 
     useEffect(() => {
         receiveMessage("file-update", ({ fileName, contents, sender }) => {
-            // Optionally, ignore if the sender is the current user
             if (sender === user.email) return;
             setFileTree((prev) => ({
                 ...prev,
@@ -149,7 +176,6 @@ export const Project = () => {
 
     useEffect(() => {
         receiveMessage("file-delete", ({ fileName, sender }) => {
-            // Optionally, ignore if the sender is the current user
             if (sender === user.email) return;
             setFileTree((prev) => {
                 const updated = { ...prev };
@@ -163,7 +189,6 @@ export const Project = () => {
         });
     }, [user.email, currentFile]);
 
-    // Handler for selecting/deselecting a user from modal
     const handleSelectUser = (userId) => {
         setSelectedUserIds((prev) =>
             prev.includes(userId)
@@ -172,7 +197,6 @@ export const Project = () => {
         );
     };
 
-    // Handler for Add Collaborator button
     const handleAddCollaborator = () => {
         if (selectedUserIds.length === 0) return;
 
@@ -182,7 +206,6 @@ export const Project = () => {
                     projectId: location.state.project._id,
                     users: selectedUserIds,
                 });
-                // Refresh collaborators after adding
                 const updated = await axios.get(
                     `/projects/get-project/${location.state.project._id}`
                 );
@@ -196,14 +219,12 @@ export const Project = () => {
         setIsModalOpen(false);
     };
 
-    // Scroll to the bottom of the message box when a new message is added
     function scrollToBottom() {
         if (messageBox.current) {
             messageBox.current.scrollTop = messageBox.current.scrollHeight;
         }
     }
 
-    // Append incoming user message
     function appendIncomingMessage({ message, sender }) {
         setMessages((prev) => [
             ...prev,
@@ -215,7 +236,6 @@ export const Project = () => {
         ]);
     }
 
-    // Append outgoing user message
     function appendOutgoingMessage({ message, user }) {
         setMessages((prev) => [
             ...prev,
@@ -227,7 +247,6 @@ export const Project = () => {
         ]);
     }
 
-    // Append AI message (rendered as markdown)
     function appendAIMessage({ message, sender }) {
         setMessages((prev) => [
             ...prev,
@@ -255,7 +274,7 @@ export const Project = () => {
 
     const handleRunProject = async () => {
         if (!webContainer) {
-            const msg = ("WebContainer not initialized.");
+            const msg = "WebContainer not initialized.";
             console.error(msg);
             setRunError(msg);
             return;
@@ -276,7 +295,7 @@ export const Project = () => {
                     },
                 })
             );
-            await installProcess.exit; // Wait for install to complete
+            await installProcess.exit;
 
             if (runProcess) {
                 runProcess.kill();
@@ -653,14 +672,49 @@ export const Project = () => {
                         <div className="actions flex gap-2 pr-2">
                             <button
                                 onClick={handleRunProject}
-                                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-200 shadow-md"
+                                disabled={!webContainer || isWebContainerLoading}
+                                className={`px-4 py-2 rounded-md shadow-md transition-colors duration-200
+                                    ${!webContainer || isWebContainerLoading
+                                        ? 'bg-gray-400 cursor-not-allowed'
+                                        : 'bg-green-600 hover:bg-green-700 text-white'}`}
                                 aria-label="Run project"
                             >
-                                <i className="ri-play-fill mr-1"></i> Run
+                                {isWebContainerLoading ? (
+                                    <span className="flex items-center">
+                                        <i className="ri-loader-4-line animate-spin mr-2"></i> Loading...
+                                    </span>
+                                ) : (
+                                    <>
+                                        <i className="ri-play-fill mr-1"></i> Run
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
 
+                    {/* WebContainer Error Display */}
+                    {webContainerError && (
+                        <div className="w-full p-4 bg-red-100 text-red-800">
+                            <div className="flex items-start">
+                                <i className="ri-error-warning-line text-xl mr-2 mt-0.5"></i>
+                                <div>
+                                    <strong className="block mb-1">WebContainer Initialization Error</strong>
+                                    <pre className="whitespace-pre-wrap text-sm">{webContainerError}</pre>
+                                    <div className="mt-2 text-sm">
+                                        For more information, visit the{" "}
+                                        <a
+                                            href="https://webcontainers.io/guides/browser-support"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 underline"
+                                        >
+                                            WebContainer browser support guide
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {/* Code Editor Content */}
                     <div className="bottom flex flex-grow h-0">
                         {currentFile &&
@@ -814,6 +868,14 @@ export const Project = () => {
                 .markdown-body a {
                     color: #60a5fa; /* blue-400 */
                     text-decoration: underline;
+                }
+                /* Add animation for loading spinner */
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                .animate-spin {
+                    animation: spin 1s linear infinite;
                 }
                 `}
             </style>
