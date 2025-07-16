@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "../config/axios.js";
 import {
@@ -12,6 +12,15 @@ import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 import 'highlight.js/styles/nord.css';
 import { getWebContainer } from "../config/webContainer.js";
+
+// Add debounce function
+const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
+};
 
 // Component to handle syntax highlighting for code blocks in Markdown
 function SyntaxHighlightedCode(props) {
@@ -133,20 +142,30 @@ export const Project = () => {
         setMessage("");
     }
 
+    // Add this useEffect for handling incoming updates
     useEffect(() => {
         receiveMessage("file-update", ({ fileName, contents, sender }) => {
-            // Optionally, ignore if the sender is the current user
-            if (sender === user.email) return;
-            setFileTree((prev) => ({
-                ...prev,
-                [fileName]: {
-                    file: {
-                        contents,
-                    },
-                },
-            }));
+            if (sender === user.email || currentFile !== fileName) return;
+
+            // Only update if content actually changed
+            if (fileTree[fileName]?.file.contents !== contents) {
+                setFileTree(prev => ({
+                    ...prev,
+                    [fileName]: {
+                        file: { contents }
+                    }
+                }));
+            }
         });
-    }, [user.email]);
+    }, [user.email, currentFile, fileTree]);
+
+    useEffect(() => {
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         receiveMessage("file-delete", ({ fileName, sender }) => {
@@ -305,6 +324,34 @@ export const Project = () => {
             setRunError(error.message || String(error));
         }
     };
+
+    // Create debounced save functions
+    const saveTimeoutRef = useRef(null);
+
+    const handleFileChange = useCallback(
+        debounce((fileName, updatedContent) => {
+            const ft = {
+                ...fileTree,
+                [fileName]: {
+                    file: {
+                        contents: updatedContent,
+                    },
+                },
+            };
+
+            setFileTree(ft);
+            saveFileTree(ft);
+
+            // Send update to other collaborators
+            sendMessage("file-update", {
+                fileName,
+                contents: updatedContent,
+                projectId: location.state.project._id,
+                sender: user.email,
+            });
+        }, 300), // 300ms debounce time
+        [fileTree, user.email, location.state.project._id]
+    );
 
     return (
         <main className="flex flex-col lg:flex-row w-screen overflow-hidden font-inter min-h-screen lg:h-screen">
@@ -668,45 +715,42 @@ export const Project = () => {
                             fileTree[currentFile] &&
                             fileTree[currentFile].file ? (
                             <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-900 text-white rounded-b-lg">
-                                <pre className="hljs h-full m-0 p-4 text-sm leading-relaxed overflow-auto">
-                                    <code
-                                        className="hljs h-full outline-none block"
-                                        contentEditable
-                                        suppressContentEditableWarning
-                                        onBlur={(e) => {
-                                            const updatedContent = e.target.innerText;
-                                            const ft = {
-                                                ...fileTree,
-                                                [currentFile]: {
-                                                    file: {
-                                                        contents: updatedContent,
-                                                    },
-                                                },
-                                            };
-                                            setFileTree(ft);
-                                            saveFileTree(ft); // Save to backend
-
-                                            // Emit file update to other collaborators
-                                            sendMessage("file-update", {
-                                                fileName: currentFile,
-                                                contents: updatedContent,
-                                                projectId: location.state.project._id,
-                                                sender: user.email,
-                                            });
-                                        }}
-                                        dangerouslySetInnerHTML={{
-                                            __html: hljs.highlight(
-                                                fileTree[currentFile]?.file.contents || "",
-                                                { language: "javascript" } // Assuming JS for highlighting, adjust as needed
-                                            ).value,
-                                        }}
-                                        style={{
-                                            whiteSpace: "pre-wrap", // Preserve whitespace and wrap lines
-                                            minHeight: "100%", // Ensure it takes full height
-                                            counterSet: "line-numbering", // For potential future line numbering
-                                        }}
-                                    />
-                                </pre>
+                                {currentFile && fileTree[currentFile] && fileTree[currentFile].file ? (
+                                    <pre className="hljs h-full m-0 p-4 text-sm leading-relaxed overflow-auto">
+                                        <code
+                                            className="hljs h-full outline-none block"
+                                            contentEditable
+                                            suppressContentEditableWarning
+                                            onInput={(e) => {
+                                                const updatedContent = e.target.innerText;
+                                                handleFileChange(currentFile, updatedContent);
+                                            }}
+                                            onBlur={(e) => {
+                                                const updatedContent = e.target.innerText;
+                                                handleFileChange(currentFile, updatedContent);
+                                                // Flush immediately on blur
+                                                if (saveTimeoutRef.current) {
+                                                    clearTimeout(saveTimeoutRef.current);
+                                                    saveTimeoutRef.current = null;
+                                                }
+                                            }}
+                                            dangerouslySetInnerHTML={{
+                                                __html: hljs.highlight(
+                                                    fileTree[currentFile]?.file.contents || "",
+                                                    { language: "javascript" }
+                                                ).value,
+                                            }}
+                                            style={{
+                                                whiteSpace: "pre-wrap",
+                                                minHeight: "100%",
+                                            }}
+                                        />
+                                    </pre>
+                                ) : (
+                                    <div className="flex-grow h-full flex items-center justify-center text-gray-500 text-lg bg-gray-100">
+                                        Select a file to view its content.
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="flex-grow h-full flex items-center justify-center text-gray-500 text-lg bg-gray-100 rounded-b-lg">
