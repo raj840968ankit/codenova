@@ -32,7 +32,7 @@ export const authUser = async (req, res, next) => {
 
         console.log('JWT_Secret : ',env.JWT_SECRET);
         
-        const decoded = jwt.verify(token, env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         // Verify the token using the secret key
         req.user = decoded;
         next();
