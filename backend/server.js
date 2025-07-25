@@ -12,17 +12,6 @@ const PORT = process.env.PORT || 3001
 
 const server = http.createServer(app)
 
-app.use((req, res, next) => {
-  console.log('CORS check for:', req.method, req.url, req.headers.origin);
-  res.header('Access-Control-Allow-Origin', env.CLIENT_URL);
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
 
 const io = new Server(server, {
     cors: {
