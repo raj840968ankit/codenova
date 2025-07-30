@@ -93,6 +93,7 @@ export const Project = () => {
             });
             appendAIMessage({ message, sender });
         });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
