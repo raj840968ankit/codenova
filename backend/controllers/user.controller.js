@@ -1,7 +1,7 @@
 import { User } from "../models/user.models.js";
 import { createUser, getAllUsers } from "../services/user.service.js";
 import { validationResult } from "express-validator";  //!install express-validator for validating fields
-import redisClient from "../services/redis.service.js";
+// import redisClient from "../services/redis.service.js";
 
 export const createUserController = async (req, res) => {
     //?check for validation errors  
@@ -99,8 +99,8 @@ export const logoutUserController = async (req, res) => {
     try {
         const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
         
-        //! we have set token in redis when user log out and will check it in auth middleware for blacklisting
-        await redisClient.set(token, 'logout', 'EX', 60 * 60 * 24 * 7);
+        // //! we have set token in redis when user log out and will check it in auth middleware for blacklisting
+        // await redisClient.set(token, 'logout', 'EX', 60 * 60 * 24 * 7);
 
         const isProduction = process.env.NODE_ENV === 'production';
         // 🧼 Clear the cookie

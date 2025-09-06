@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import redisClient from '../services/redis.service.js';
+// import redisClient from '../services/redis.service.js';
 
 export const authUser = async (req, res, next) => {
     try {
@@ -16,21 +16,21 @@ export const authUser = async (req, res, next) => {
             return res.status(401).send({ error: 'Unauthorized User' });
         }
 
-        const isBlackListed = await redisClient.get(token);
-        // Check if the token is blacklisted in Redis after logout
-        // If the token is blacklisted, it means the user has logged out
+        // const isBlackListed = await redisClient.get(token);
+        // // Check if the token is blacklisted in Redis after logout
+        // // If the token is blacklisted, it means the user has logged out
 
-        const isProduction = process.env.NODE_ENV === 'production';
-        if(isBlackListed === 'logout') {
-            res.clearCookie('token', {
-                httpOnly: true,
-                secure: isProduction, // true only on HTTPS
-                sameSite: isProduction ? 'None' : 'Lax', // Or 'None' if frontend is on different domain and using HTTPS
-            });
-            return res.status(401).send({ error: 'Unauthorized User' });
-        }
+        // const isProduction = process.env.NODE_ENV === 'production';
+        // if(isBlackListed === 'logout') {
+        //     res.clearCookie('token', {
+        //         httpOnly: true,
+        //         secure: isProduction, // true only on HTTPS
+        //         sameSite: isProduction ? 'None' : 'Lax', // Or 'None' if frontend is on different domain and using HTTPS
+        //     });
+        //     return res.status(401).send({ error: 'Unauthorized User' });
+        // }
 
-        console.log('JWT_Secret : ',env.JWT_SECRET);
+        // console.log('JWT_Secret : ',env.JWT_SECRET);
         
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         // Verify the token using the secret key
